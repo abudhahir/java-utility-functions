@@ -124,4 +124,126 @@ class ConditionFailureTest {
         assertEquals(failure1.getConditionType(), failure2.getConditionType());
         assertEquals(failure1.getMessage(), failure2.getMessage());
     }
+
+    @Test
+    void shouldSatisfyReflexivePropertyOfEquals() {
+        ConditionFailure failure = ConditionFailure.builder()
+            .conditionType("Header")
+            .fieldName("X-Api-Key")
+            .operation("equals")
+            .expectedValue("premium")
+            .actualValue("basic")
+            .message("Test message")
+            .build();
+
+        assertEquals(failure, failure, "Object should equal itself (reflexive property)");
+    }
+
+    @Test
+    void shouldSatisfySymmetricPropertyOfEquals() {
+        ConditionFailure failure1 = ConditionFailure.builder()
+            .conditionType("Header")
+            .fieldName("X-Api-Key")
+            .operation("equals")
+            .expectedValue("premium")
+            .actualValue("basic")
+            .message("Test message")
+            .build();
+
+        ConditionFailure failure2 = ConditionFailure.builder()
+            .conditionType("Header")
+            .fieldName("X-Api-Key")
+            .operation("equals")
+            .expectedValue("premium")
+            .actualValue("basic")
+            .message("Test message")
+            .build();
+
+        assertEquals(failure1, failure2, "x.equals(y) should return true");
+        assertEquals(failure2, failure1, "y.equals(x) should return true (symmetric property)");
+    }
+
+    @Test
+    void shouldHaveEqualHashCodesForEqualObjects() {
+        ConditionFailure failure1 = ConditionFailure.builder()
+            .conditionType("Header")
+            .fieldName("X-Api-Key")
+            .operation("equals")
+            .expectedValue("premium")
+            .actualValue("basic")
+            .message("Test message")
+            .build();
+
+        ConditionFailure failure2 = ConditionFailure.builder()
+            .conditionType("Header")
+            .fieldName("X-Api-Key")
+            .operation("equals")
+            .expectedValue("premium")
+            .actualValue("basic")
+            .message("Test message")
+            .build();
+
+        assertEquals(failure1, failure2, "Objects should be equal");
+        assertEquals(failure1.hashCode(), failure2.hashCode(), "Equal objects must have equal hashCodes");
+    }
+
+    @Test
+    void shouldNotBeEqualToDifferentObjects() {
+        ConditionFailure failure1 = ConditionFailure.builder()
+            .conditionType("Header")
+            .fieldName("X-Api-Key")
+            .operation("equals")
+            .expectedValue("premium")
+            .actualValue("basic")
+            .message("Test message")
+            .build();
+
+        ConditionFailure failure2 = ConditionFailure.builder()
+            .conditionType("QueryParam")
+            .fieldName("apiKey")
+            .operation("contains")
+            .expectedValue("gold")
+            .actualValue("silver")
+            .message("Different message")
+            .build();
+
+        assertNotEquals(failure1, failure2, "Different objects should not be equal");
+    }
+
+    @Test
+    void shouldReturnFalseWhenComparedToNull() {
+        ConditionFailure failure = ConditionFailure.builder()
+            .conditionType("Header")
+            .fieldName("X-Api-Key")
+            .operation("equals")
+            .expectedValue("premium")
+            .actualValue("basic")
+            .message("Test message")
+            .build();
+
+        assertNotEquals(failure, null, "Object should not equal null");
+        assertNotEquals(null, failure, "null should not equal object");
+    }
+
+    @Test
+    void shouldGenerateToStringWithAllNullFields() {
+        ConditionFailure failure = ConditionFailure.builder()
+            .conditionType(null)
+            .fieldName(null)
+            .operation(null)
+            .expectedValue(null)
+            .actualValue(null)
+            .message(null)
+            .build();
+
+        String result = failure.toString();
+        assertNotNull(result, "toString should not return null");
+        assertTrue(result.contains("ConditionFailure"), "toString should contain class name");
+        assertTrue(result.contains("conditionType="), "toString should contain conditionType field");
+        assertTrue(result.contains("fieldName="), "toString should contain fieldName field");
+        assertTrue(result.contains("operation="), "toString should contain operation field");
+        assertTrue(result.contains("expectedValue="), "toString should contain expectedValue field");
+        assertTrue(result.contains("actualValue="), "toString should contain actualValue field");
+        assertTrue(result.contains("message="), "toString should contain message field");
+    }
 }
