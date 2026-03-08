@@ -1,5 +1,7 @@
 package com.cleveloper.jufu.requestutils.condition.core;
 
+import com.cleveloper.jufu.requestutils.condition.builder.ConditionGroupBuilder;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -85,5 +87,12 @@ public class ConditionGroup implements Condition {
      */
     public static ConditionGroup of(GroupOperator operator, EvaluationMode mode, Condition... conditions) {
         return new ConditionGroup(operator, Arrays.asList(conditions), mode);
+    }
+
+    /**
+     * Create a new builder for fluent construction of condition groups.
+     */
+    public static ConditionGroupBuilder builder() {
+        return new ConditionGroupBuilder();
     }
 }
