@@ -26,6 +26,12 @@ A Spring Boot utility module providing powerful HTTP request condition matching 
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
 
+## 📚 New to Request Utils?
+
+**[Start with the Tutorial →](docs/tutorial/00-index.md)** - Comprehensive getting started guide with examples
+
+---
+
 ## Overview
 
 Request Utils provides a flexible condition matching engine for HTTP requests. Evaluate headers, query parameters, and (coming soon) JSON payloads against configured conditions with detailed success/failure reporting.
