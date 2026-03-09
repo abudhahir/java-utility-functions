@@ -19,6 +19,7 @@ A Spring Boot utility module providing powerful HTTP request condition matching 
   - [Pattern Matching with Regex](#pattern-matching-with-regex)
   - [Evaluation Modes](#evaluation-modes)
   - [Custom Conditions](#custom-conditions)
+  - [Annotation-Based (AOP) Usage](#annotation-based-aop-usage)
 - [Exception Handling](#exception-handling)
 - [Configuration](#configuration)
 - [API Reference](#api-reference)
@@ -28,7 +29,7 @@ A Spring Boot utility module providing powerful HTTP request condition matching 
 
 ## Overview
 
-Request Utils provides a flexible condition matching engine for HTTP requests. Evaluate headers, query parameters, and (coming soon) JSON payloads against configured conditions with detailed success/failure reporting.
+Request Utils provides a flexible condition matching engine for HTTP requests. Evaluate headers, query parameters, and JSON payloads against configured conditions with detailed success/failure reporting. Use programmatic APIs or declarative annotations for clean, maintainable code.
 
 **Key Use Cases:**
 - Request routing based on headers or parameters
@@ -42,6 +43,7 @@ Request Utils provides a flexible condition matching engine for HTTP requests. E
 ✅ **Currently Available:**
 - Header condition matching
 - Query parameter condition matching
+- JSON payload matching (JSONPath and exact field matching)
 - String operations: equals, contains, starts with, ends with, regex
 - Case-sensitive and case-insensitive matching
 - Boolean logic: AND/OR groups with unlimited nesting
@@ -49,13 +51,10 @@ Request Utils provides a flexible condition matching engine for HTTP requests. E
 - Detailed failure reporting
 - Fluent builder API
 - Custom condition support
+- Annotation-based AOP integration (`@JUFUMatchConditions`)
+- Declarative condition definitions with inline annotations
 - Spring Boot auto-configuration
 - Zero-configuration setup
-
-🚧 **Coming Soon:**
-- JSON payload matching (JSONPath and exact field matching)
-- Annotation-based AOP integration (`@JUFUMatchConditions`)
-- Declarative condition definitions
 
 ## Installation
 
@@ -533,6 +532,222 @@ Condition businessHoursCheck = ConditionGroup.and(
 ConditionResult result = matcher.evaluate(businessHoursCheck, request);
 ```
 
+### Annotation-Based (AOP) Usage
+
+Simplify condition matching with declarative annotations. The `@JUFUMatchConditions` annotation allows you to define conditions directly on controller methods.
+
+#### Enable AOP Support
+
+AOP support is automatically enabled with Spring Boot auto-configuration. No additional setup required!
+
+#### Basic Header Annotation
+
+```java
+import com.cleveloper.jufu.requestutils.condition.annotations.*;
+
+@RestController
+public class ApiController {
+
+    @GetMapping("/premium/users")
+    @JUFUMatchConditions(value = {
+        @JUFUCondition(header = @JUFUHeader(
+            name = "X-User-Type",
+            equals = "premium"
+        ))
+    })
+    public ResponseEntity<?> getPremiumUsers() {
+        // Only called if X-User-Type header equals "premium"
+        return ResponseEntity.ok(premiumUsers);
+    }
+}
+```
+
+#### Query Parameter Annotation
+
+```java
+@GetMapping("/api/data")
+@JUFUMatchConditions(value = {
+    @JUFUCondition(queryParam = @JUFUQueryParam(
+        name = "version",
+        equals = "v2"
+    ))
+})
+public ResponseEntity<?> getDataV2() {
+    // Only called if version parameter equals "v2"
+    return ResponseEntity.ok(data);
+}
+```
+
+#### JSON Path Matching
+
+Match against JSON request body fields using JSONPath:
+
+```java
+@PostMapping("/api/users")
+@JUFUMatchConditions(value = {
+    @JUFUCondition(jsonPath = @JUFUJsonPath(
+        path = "$.user.role",
+        equals = "admin"
+    ))
+})
+public ResponseEntity<?> createUser(@RequestBody UserRequest request) {
+    // Only called if JSON body contains {"user": {"role": "admin"}}
+    return ResponseEntity.ok("User created");
+}
+```
+
+#### Multiple Conditions (AND Logic)
+
+All conditions must be met:
+
+```java
+@GetMapping("/api/secure/data")
+@JUFUMatchConditions(
+    value = {
+        @JUFUCondition(header = @JUFUHeader(
+            name = "X-API-Key",
+            equals = "valid-key"
+        )),
+        @JUFUCondition(queryParam = @JUFUQueryParam(
+            name = "version",
+            startsWith = "v2"
+        ))
+    },
+    mode = EvaluationMode.FAIL_FAST
+)
+public ResponseEntity<?> getSecureData() {
+    // Only called if BOTH conditions are met
+    return ResponseEntity.ok(data);
+}
+```
+
+#### String Matching Operations
+
+All string matching operations are supported:
+
+```java
+// Exact match
+@JUFUCondition(header = @JUFUHeader(name = "X-Type", equals = "premium"))
+
+// Contains substring
+@JUFUCondition(header = @JUFUHeader(name = "User-Agent", contains = "Mobile"))
+
+// Starts with prefix
+@JUFUCondition(header = @JUFUHeader(name = "Authorization", startsWith = "Bearer "))
+
+// Ends with suffix
+@JUFUCondition(queryParam = @JUFUQueryParam(name = "format", endsWith = "json"))
+
+// Regex pattern
+@JUFUCondition(header = @JUFUHeader(
+    name = "X-Request-Id",
+    regex = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+))
+
+// Case-insensitive matching
+@JUFUCondition(header = @JUFUHeader(
+    name = "Content-Type",
+    equals = "application/json",
+    ignoreCase = true
+))
+```
+
+#### Exception Handling with AOP
+
+When conditions fail, a `ConditionNotMetException` is thrown. Handle it with `@ControllerAdvice`:
+
+```java
+import com.cleveloper.jufu.requestutils.condition.aop.ConditionNotMetException;
+import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpStatus;
+
+@ControllerAdvice
+public class ConditionExceptionHandler {
+
+    @ExceptionHandler(ConditionNotMetException.class)
+    public ResponseEntity<ErrorResponse> handleConditionNotMet(
+            ConditionNotMetException ex) {
+
+        ErrorResponse error = new ErrorResponse(
+            "FORBIDDEN",
+            "Condition not met: " + ex.getMessage(),
+            ex.getResult().getFailures()
+        );
+
+        return ResponseEntity
+            .status(HttpStatus.FORBIDDEN)
+            .body(error);
+    }
+}
+```
+
+#### Real-World Example: Secured API Endpoint
+
+```java
+@RestController
+@RequestMapping("/api/v2")
+public class SecuredApiController {
+
+    @PostMapping("/admin/users")
+    @JUFUMatchConditions(
+        value = {
+            // Validate API key header
+            @JUFUCondition(header = @JUFUHeader(
+                name = "X-API-Key",
+                regex = "^[A-Za-z0-9]{32}$"
+            )),
+            // Ensure JSON content type
+            @JUFUCondition(header = @JUFUHeader(
+                name = "Content-Type",
+                equals = "application/json",
+                ignoreCase = true
+            )),
+            // Check user role in JSON body
+            @JUFUCondition(jsonPath = @JUFUJsonPath(
+                path = "$.requestor.role",
+                equals = "admin"
+            ))
+        },
+        mode = EvaluationMode.COLLECT_ALL  // Get all validation errors
+    )
+    public ResponseEntity<?> createAdminUser(@RequestBody CreateUserRequest request) {
+        // This method only executes if:
+        // 1. X-API-Key header is valid
+        // 2. Content-Type is application/json
+        // 3. JSON body has requestor.role = "admin"
+
+        // Business logic here
+        return ResponseEntity.ok("User created successfully");
+    }
+}
+```
+
+Request example that would pass:
+```bash
+curl -X POST https://api.example.com/api/v2/admin/users \
+  -H "X-API-Key: abc123def456ghi789jkl012mno345pq" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "requestor": {
+      "role": "admin"
+    },
+    "newUser": {
+      "name": "John Doe",
+      "email": "john@example.com"
+    }
+  }'
+```
+
+#### Advantages of AOP Approach
+
+1. **Declarative**: Conditions are visible in method signatures
+2. **Reusable**: Same annotations across multiple endpoints
+3. **Maintainable**: Less boilerplate code
+4. **Testable**: Easy to mock and test in isolation
+5. **Clean Separation**: Business logic separated from validation
+
 ## Exception Handling
 
 ### ConditionNotMetException
@@ -926,22 +1141,35 @@ public class DeviceRouter {
 - Builder API
 - Spring Boot auto-configuration
 
-### Phase 2 (Planned) 🚧
+### Phase 2 (Completed) ✅
 - JSON payload matching
-  - JSONPath-based field extraction
-  - Exact field matching
+  - JSONPath-based field extraction and value matching
+  - Exact field matching with template comparison
 - Annotation-based AOP integration
-  - `@JUFUMatchConditions` annotation
-  - Method and class-level declarations
-  - Inline condition definitions
-- Configuration properties
+  - `@JUFUMatchConditions` annotation for declarative conditions
+  - Method-level condition declarations
+  - Inline condition definitions (`@JUFUHeader`, `@JUFUQueryParam`, `@JUFUJsonPath`, `@JUFUJsonExactMatch`)
+  - Automatic aspect execution with Spring AOP
+  - `ConditionNotMetException` for failed conditions
 
-### Phase 3 (Future) 📋
-- Rate limiting conditions
-- IP address matching
-- Time-based conditions (working hours, date ranges)
-- Caching and performance optimizations
-- Metrics and monitoring integration
+### Phase 3 (Planned) 📋
+- Configuration properties for global settings
+  - Global evaluation mode configuration
+  - AOP aspect order customization
+  - Enable/disable AOP integration
+- Additional condition types
+  - Rate limiting conditions
+  - IP address matching
+  - Time-based conditions (working hours, date ranges)
+  - Request body size validation
+  - HTTP method matching
+- Performance optimizations
+  - Condition result caching
+  - Compiled regex pattern caching
+- Observability
+  - Metrics and monitoring integration (Micrometer)
+  - Condition evaluation tracing
+  - Performance insights
 
 ## Contributing
 

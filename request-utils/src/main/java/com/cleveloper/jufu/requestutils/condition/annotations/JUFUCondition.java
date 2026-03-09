@@ -26,4 +26,14 @@ public @interface JUFUCondition {
      * Inline query parameter condition.
      */
     JUFUQueryParam queryParam() default @JUFUQueryParam(name = "");
+
+    /**
+     * Inline JSONPath condition.
+     */
+    JUFUJsonPath jsonPath() default @JUFUJsonPath(path = "");
+
+    /**
+     * Inline exact JSON field matching condition.
+     */
+    JUFUJsonExactMatch jsonExactMatch() default @JUFUJsonExactMatch(template = "", fields = {});
 }
