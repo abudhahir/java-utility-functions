@@ -99,7 +99,6 @@ Examples cover:
 
 ### Module Documentation
 - **[Main README](../../README.md)** - Module overview and API reference
-- **[Implementation Plans](../IMPLEMENTATION_PLAN.md)** - Detailed design docs (if available)
 
 ### External Links
 - [Spring Boot Documentation](https://spring.io/projects/spring-boot)
