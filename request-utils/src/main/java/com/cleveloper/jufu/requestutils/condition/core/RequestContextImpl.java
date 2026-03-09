@@ -1,6 +1,8 @@
 package com.cleveloper.jufu.requestutils.condition.core;
 
 import jakarta.servlet.http.HttpServletRequest;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.util.Collections;
@@ -10,6 +12,8 @@ import java.util.List;
  * Implementation of RequestContext backed by Spring's HttpServletRequest.
  */
 class RequestContextImpl implements RequestContext {
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
     private final HttpServletRequest request;
     private String body;
     private Object jsonBody;
@@ -51,9 +55,18 @@ class RequestContextImpl implements RequestContext {
     @Override
     public Object getJsonBody() {
         if (!jsonParsed) {
-            // JSON parsing will be implemented when JSONPath dependency is added
-            // For now, return null
             jsonParsed = true;
+            String contentType = request.getContentType();
+            if (contentType != null && contentType.contains("application/json")) {
+                String bodyContent = getBody();
+                if (bodyContent != null) {
+                    try {
+                        jsonBody = OBJECT_MAPPER.readTree(bodyContent);
+                    } catch (Exception e) {
+                        // If parsing fails, leave jsonBody as null
+                    }
+                }
+            }
         }
         return jsonBody;
     }
