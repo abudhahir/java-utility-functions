@@ -1,0 +1,24 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/users",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.email",
+        "equalToJson": "\"charlie@example.com\""
+      }
+    ]
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "code": "EMAIL_CONFLICT",
+      "message": "Email already registered"
+    }
+  },
+  "priority": 5
+}
+

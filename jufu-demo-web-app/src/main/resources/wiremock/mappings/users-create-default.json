@@ -1,0 +1,21 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/users"
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "u-105",
+      "email": "{{request.body 'jsonPath' '$.email'}}",
+      "name": "{{request.body 'jsonPath' '$.name'}}",
+      "role": "{{request.body 'jsonPath' '$.role'}}",
+      "status": "ACTIVE"
+    }
+  },
+  "priority": 1
+}
+

@@ -1,0 +1,41 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPattern": "/users\\?page=.*&size=.*"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "data": [
+        {
+          "id": "u-101",
+          "email": "alice@example.com",
+          "name": "Alice Smith",
+          "role": "ADMIN",
+          "status": "ACTIVE"
+        },
+        {
+          "id": "u-102",
+          "email": "bob@example.com",
+          "name": "Bob Johnson",
+          "role": "USER",
+          "status": "ACTIVE"
+        },
+        {
+          "id": "u-103",
+          "email": "charlie@example.com",
+          "name": "Charlie Brown",
+          "role": "USER",
+          "status": "INACTIVE"
+        }
+      ],
+      "page": 0,
+      "size": 10,
+      "total": 3
+    }
+  }
+}
+

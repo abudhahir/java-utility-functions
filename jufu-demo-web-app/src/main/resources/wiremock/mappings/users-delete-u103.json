@@ -1,0 +1,10 @@
+{
+  "request": {
+    "method": "DELETE",
+    "urlPath": "/users/u-103"
+  },
+  "response": {
+    "status": 204
+  }
+}
+
