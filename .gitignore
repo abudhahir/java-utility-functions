@@ -25,3 +25,9 @@ replay_pid*
 
 # Git worktrees
 .worktrees/
+/rule-factory/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst
+/rule-factory/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst
+/rule-factory/target/maven-status/maven-compiler-plugin/testCompile/default-testCompile/createdFiles.lst
+/rule-factory/target/maven-status/maven-compiler-plugin/testCompile/default-testCompile/inputFiles.lst
+/rule-factory/target/surefire-reports/com.cleveloper.jufu.rulefactory.predicate.PredicateResultFactoryTest.txt
+/rule-factory/target/surefire-reports/TEST-com.cleveloper.jufu.rulefactory.predicate.PredicateResultFactoryTest.xml

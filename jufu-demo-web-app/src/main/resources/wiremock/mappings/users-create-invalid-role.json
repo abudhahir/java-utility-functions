@@ -1,0 +1,24 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/users",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.role",
+        "equalToJson": "\"INVALID_ROLE\""
+      }
+    ]
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "code": "INVALID_ROLE",
+      "message": "Role must be one of: ADMIN, USER"
+    }
+  },
+  "priority": 5
+}
+

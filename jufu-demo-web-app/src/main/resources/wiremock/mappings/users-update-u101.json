@@ -1,0 +1,20 @@
+{
+  "request": {
+    "method": "PUT",
+    "urlPath": "/users/u-101"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "u-101",
+      "email": "alice.updated@example.com",
+      "name": "Alice Smith Updated",
+      "role": "ADMIN",
+      "status": "ACTIVE"
+    }
+  }
+}
+

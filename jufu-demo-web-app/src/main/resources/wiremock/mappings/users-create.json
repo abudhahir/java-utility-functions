@@ -1,0 +1,26 @@
+{
+  "request": {
+    "method": "POST",
+    "urlPath": "/users",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.email",
+        "equalToJson": "\"newuser@example.com\""
+      }
+    ]
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "id": "u-104",
+      "email": "newuser@example.com",
+      "name": "New User",
+      "role": "USER",
+      "status": "ACTIVE"
+    }
+  }
+}
+

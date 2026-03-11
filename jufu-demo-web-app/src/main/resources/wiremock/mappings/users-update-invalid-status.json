@@ -1,0 +1,24 @@
+{
+  "request": {
+    "method": "PUT",
+    "urlPath": "/users/u-101",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.status",
+        "equalToJson": "\"INVALID_STATUS\""
+      }
+    ]
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "code": "INVALID_STATUS_TRANSITION",
+      "message": "Status must be one of: ACTIVE, INACTIVE, SUSPENDED"
+    }
+  },
+  "priority": 5
+}
+
