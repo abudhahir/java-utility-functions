@@ -425,52 +425,46 @@ class UserApiResponseSelectorTest {
 
 ---
 
-## Example 4: HTTP ResponseEntity Builder with Nested Predicate Selection
+## Example 4: Feature-Gated Endpoint with Response Envelope
 
-**Scenario:** A REST API endpoint that builds a `ResponseEntity<ApiResponse<T>>` by nesting
-`PredicateResultFactory` calls. Each layer of the response — HTTP status, body, and error detail —
-is resolved by its own predicate rule, producing a fully-formed, consistent JSON response without
-any `if/else` blocks.
+**Scenario:** A REST endpoint that gates access by subscription plan, then validates the request —
+building a consistent `ApiResponse<T>` envelope for every outcome without `if/else`.
 
 ### Requirements
 
-- Authenticated requests that pass authorisation receive `200 OK` with the requested resource
-- Authenticated but unauthorised requests receive `403 Forbidden` with a structured error body
-- Unauthenticated requests receive `401 Unauthorized` with a structured error body
-- Malformed or resource-not-found requests receive `404 Not Found` or `422 Unprocessable Entity`
-- All responses share the same `ApiResponse<T>` envelope
-- Nesting resolves the outermost condition first, then delegates inner selection to a nested factory call
+- Users whose plan does not include the feature receive `402 Payment Required`
+- Users with access but a blank query receive `400 Bad Request`
+- Valid requests receive `200 OK` with the result wrapped in `ApiResponse<T>`
+- Only the reached branch builds a response body
 
 ### Design Decisions
 
 | Decision | Choice | Why |
 |----------|--------|-----|
-| Eager vs Lazy | `selectLazy` throughout | Avoids building unused response bodies and status objects |
-| Nesting depth | Two levels | Outer = authentication gate; inner = authorisation / domain gate |
-| Envelope type | `ApiResponse<T>` record | Consistent JSON regardless of success or failure |
-| HttpStatus selection | Eager `select` on a single boolean | Status values are lightweight constants |
+| Eager vs Lazy | `selectLazy` throughout | Avoids constructing unused response bodies |
+| Nesting depth | Two levels | Outer = plan gate; inner = input gate |
+| Envelope type | `ApiResponse<T>` record | Consistent JSON shape across all outcomes |
 
 ### File Structure
 
 ```
-src/main/java/com/example/api/
-├── ApiResponse.java                   # Shared response envelope
-├── ApiError.java                      # Error detail inside envelope
-├── RequestContext.java                # Auth + domain context per request
-├── predicate/
-│   └── RequestRules.java              # All predicate constants
-└── controller/
-    └── UserResourceController.java    # Endpoint using nested factory
+src/main/java/com/example/feature/
+├── ApiResponse.java          # Shared response envelope
+├── ApiError.java             # Error detail inside envelope
+├── FeatureRequest.java       # Per-request domain context
+├── FeatureRules.java         # Predicate constants
+├── FeatureService.java       # Service interface
+└── FeatureController.java    # Endpoint using nested selectLazy
 
-src/test/java/com/example/api/controller/
-└── UserResourceControllerTest.java
+src/test/java/com/example/feature/
+└── FeatureControllerTest.java
 ```
 
 ### Implementation
 
 **ApiResponse.java**
 ```java
-package com.example.api;
+package com.example.feature;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
@@ -478,22 +472,17 @@ import com.fasterxml.jackson.annotation.JsonInclude;
  * Uniform JSON envelope for every API response.
  *
  * <pre>
- * // Success
- * { "success": true,  "data": { ... },  "error": null }
- *
- * // Failure
- * { "success": false, "data": null, "error": { "code": "FORBIDDEN", "message": "..." } }
+ * { "success": true,  "data": "result" }
+ * { "success": false, "error": { "code": "INVALID_INPUT", "message": "..." } }
  * </pre>
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record ApiResponse<T>(boolean success, T data, ApiError error) {
 
-    /** Factory method — success response. */
     public static <T> ApiResponse<T> ok(T data) {
         return new ApiResponse<>(true, data, null);
     }
 
-    /** Factory method — error response. */
     public static <T> ApiResponse<T> error(String code, String message) {
         return new ApiResponse<>(false, null, new ApiError(code, message));
     }
@@ -502,286 +491,128 @@ public record ApiResponse<T>(boolean success, T data, ApiError error) {
 
 **ApiError.java**
 ```java
-package com.example.api;
+package com.example.feature;
 
-/** Error detail embedded inside {@link ApiResponse} for failure responses. */
 public record ApiError(String code, String message) {}
 ```
 
-**RequestContext.java**
+**FeatureRequest.java**
 ```java
-package com.example.api;
+package com.example.feature;
 
-/**
- * Per-request context carrying authentication and authorisation state,
- * plus the resolved domain object (if any).
- */
-public record RequestContext(
-        boolean authenticated,
-        boolean authorised,
-        boolean resourceFound,
-        boolean payloadValid,
-        Object  resource        // may be null if not found / not authorised
-) {}
+public record FeatureRequest(String userId, boolean planIncludesFeature, String query) {}
 ```
 
-**RequestRules.java**
+**FeatureRules.java**
 ```java
-package com.example.api.predicate;
+package com.example.feature;
 
 import com.cleveloper.jufu.rulefactory.predicate.PredicateCondition;
-import com.example.api.RequestContext;
 
-/** Predicate constants for HTTP request gate decisions. */
-public final class RequestRules {
+public final class FeatureRules {
+    private FeatureRules() {}
 
-    private RequestRules() {}
+    public static final PredicateCondition<FeatureRequest> PLAN_INCLUDES_FEATURE =
+        FeatureRequest::planIncludesFeature;
 
-    /** True when the caller has presented valid credentials. */
-    public static final PredicateCondition<RequestContext> IS_AUTHENTICATED =
-            RequestContext::authenticated;
-
-    /** True when the authenticated caller has permission for the requested resource. */
-    public static final PredicateCondition<RequestContext> IS_AUTHORISED =
-            RequestContext::authorised;
-
-    /** True when the requested resource exists. */
-    public static final PredicateCondition<RequestContext> RESOURCE_EXISTS =
-            RequestContext::resourceFound;
-
-    /** True when the request payload passes domain validation. */
-    public static final PredicateCondition<RequestContext> PAYLOAD_VALID =
-            RequestContext::payloadValid;
+    public static final PredicateCondition<FeatureRequest> QUERY_VALID =
+        req -> req.query() != null && !req.query().isBlank();
 }
 ```
 
-**UserResourceController.java**
+**FeatureService.java**
 ```java
-package com.example.api.controller;
+package com.example.feature;
+
+public interface FeatureService {
+    String process(FeatureRequest req);
+}
+```
+
+**FeatureController.java**
+```java
+package com.example.feature;
 
 import com.cleveloper.jufu.rulefactory.predicate.PredicateResultFactory;
-import com.example.api.ApiResponse;
-import com.example.api.RequestContext;
-import com.example.api.predicate.RequestRules;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Demonstrates nested {@link PredicateResultFactory} calls to build a
+ * Demonstrates two-level nested {@link PredicateResultFactory} calls to build a
  * {@link ResponseEntity} with a typed {@link ApiResponse} envelope — no if/else.
  *
  * <p>Decision tree:
  * <pre>
- *   authenticated?
- *   ├── NO  → 401 Unauthorized
- *   └── YES → authorised?
- *               ├── NO  → 403 Forbidden
- *               └── YES → resource exists?
- *                           ├── NO  → 404 Not Found
- *                           └── YES → payload valid?
- *                                       ├── NO  → 422 Unprocessable Entity
- *                                       └── YES → 200 OK  (resource body)
+ *   plan includes feature?
+ *   ├── NO  → 402 Payment Required
+ *   └── YES → query valid?
+ *               ├── NO  → 400 Bad Request
+ *               └── YES → 200 OK
  * </pre>
  */
 @RestController
-@RequestMapping("/api/v1/users")
-public class UserResourceController {
+@RequestMapping("/api/v1/feature")
+public class FeatureController {
 
-    private final UserService userService;
+    private final FeatureService featureService;
 
-    public UserResourceController(UserService userService) {
-        this.userService = userService;
+    public FeatureController(FeatureService featureService) {
+        this.featureService = featureService;
     }
 
-    /**
-     * GET /api/v1/users/{id}
-     *
-     * <p>Resolves the response by nesting four predicate factory calls.
-     * Only the branch that is actually reached is constructed.
-     */
-    @GetMapping("/{id}")
-    public ResponseEntity<ApiResponse<UserDto>> getUser(
-            @PathVariable String id,
-            @RequestHeader(value = "Authorization", required = false) String authHeader
-    ) {
-        RequestContext ctx = userService.buildContext(id, authHeader);
+    @PostMapping
+    public ResponseEntity<ApiResponse<String>> processFeature(@RequestBody FeatureRequest req) {
 
         return PredicateResultFactory.selectLazy(
+            FeatureRules.PLAN_INCLUDES_FEATURE, req,
 
-            // ── Gate 1: Authentication ───────────────────────────────────────
-            RequestRules.IS_AUTHENTICATED,
-            ctx,
-
-            // Authenticated branch → proceed to inner gates
+            // Plan gate passed → check input validity
             () -> PredicateResultFactory.selectLazy(
+                FeatureRules.QUERY_VALID, req,
 
-                // ── Gate 2: Authorisation ────────────────────────────────────
-                RequestRules.IS_AUTHORISED,
-                ctx,
+                // ✅ Both gates passed — 200 OK
+                () -> ResponseEntity.ok(ApiResponse.ok(featureService.process(req))),
 
-                // Authorised branch → proceed to resource check
-                () -> PredicateResultFactory.selectLazy(
-
-                    // ── Gate 3: Resource existence ───────────────────────────
-                    RequestRules.RESOURCE_EXISTS,
-                    ctx,
-
-                    // Resource found → proceed to payload validation
-                    () -> PredicateResultFactory.selectLazy(
-
-                        // ── Gate 4: Payload / domain validity ────────────────
-                        RequestRules.PAYLOAD_VALID,
-                        ctx,
-
-                        // ✅ All gates passed — 200 OK
-                        () -> ResponseEntity
-                                .status(HttpStatus.OK)
-                                .body(ApiResponse.ok(
-                                        UserDto.from(ctx.resource())
-                                )),
-
-                        // ❌ Invalid payload — 422 Unprocessable Entity
-                        () -> ResponseEntity
-                                .status(HttpStatus.UNPROCESSABLE_ENTITY)
-                                .<ApiResponse<UserDto>>body(ApiResponse.error(
-                                        "INVALID_INPUT",
-                                        "Request payload did not pass domain validation"
-                                ))
-                    ),
-
-                    // ❌ Resource not found — 404 Not Found
-                    () -> ResponseEntity
-                            .status(HttpStatus.NOT_FOUND)
-                            .<ApiResponse<UserDto>>body(ApiResponse.error(
-                                    "USER_NOT_FOUND",
-                                    "No user found with id: " + id
-                            ))
-                ),
-
-                // ❌ Not authorised — 403 Forbidden
-                () -> ResponseEntity
-                        .status(HttpStatus.FORBIDDEN)
-                        .<ApiResponse<UserDto>>body(ApiResponse.error(
-                                "FORBIDDEN",
-                                "You do not have permission to access this resource"
-                        ))
+                // ❌ Blank query — 400 Bad Request
+                () -> ResponseEntity.badRequest()
+                        .<ApiResponse<String>>body(ApiResponse.error(
+                                "INVALID_INPUT", "query must not be blank"))
             ),
 
-            // ❌ Not authenticated — 401 Unauthorized
+            // ❌ Feature not in plan — 402 Payment Required
             () -> ResponseEntity
-                    .status(HttpStatus.UNAUTHORIZED)
-                    .<ApiResponse<UserDto>>body(ApiResponse.error(
-                            "UNAUTHORIZED",
-                            "Valid authentication credentials are required"
-                    ))
+                    .status(HttpStatus.PAYMENT_REQUIRED)
+                    .<ApiResponse<String>>body(ApiResponse.error(
+                            "PLAN_UPGRADE_REQUIRED",
+                            "This feature is not included in your current plan"))
         );
     }
 }
 ```
 
-> **Reading the nesting:** Each `selectLazy` call is a single decision gate.
-> The true-branch supplier either returns a final `ResponseEntity` or delegates
-> to the next inner gate via another `selectLazy` call.
-> The false-branch supplier always returns a final `ResponseEntity` immediately.
-> This means each level resolves exactly one HTTP status category.
-
-### Supporting Types
-
-**UserDto.java**
-```java
-package com.example.api.controller;
-
-/** Outbound user representation. */
-public record UserDto(String id, String name, String email) {
-    public static UserDto from(Object resource) {
-        // Cast to your actual domain User type in a real application
-        User user = (User) resource;
-        return new UserDto(user.getId(), user.getName(), user.getEmail());
-    }
-}
-```
-
-**UserService.java**
-```java
-package com.example.api.controller;
-
-import com.example.api.RequestContext;
-
-public interface UserService {
-    /**
-     * Resolves authentication, authorisation, and resource lookup
-     * into a single {@link RequestContext} for downstream gate evaluation.
-     */
-    RequestContext buildContext(String userId, String authHeader);
-}
-```
-
 ### JSON Responses
 
-**200 OK — success**
+**200 OK**
 ```json
-{
-  "success": true,
-  "data": {
-    "id": "u-101",
-    "name": "Alice Smith",
-    "email": "alice@example.com"
-  }
-}
+{ "success": true, "data": "result text" }
 ```
 
-**401 Unauthorized**
+**400 Bad Request**
 ```json
-{
-  "success": false,
-  "error": {
-    "code": "UNAUTHORIZED",
-    "message": "Valid authentication credentials are required"
-  }
-}
+{ "success": false, "error": { "code": "INVALID_INPUT", "message": "query must not be blank" } }
 ```
 
-**403 Forbidden**
+**402 Payment Required**
 ```json
-{
-  "success": false,
-  "error": {
-    "code": "FORBIDDEN",
-    "message": "You do not have permission to access this resource"
-  }
-}
-```
-
-**404 Not Found**
-```json
-{
-  "success": false,
-  "error": {
-    "code": "USER_NOT_FOUND",
-    "message": "No user found with id: u-999"
-  }
-}
-```
-
-**422 Unprocessable Entity**
-```json
-{
-  "success": false,
-  "error": {
-    "code": "INVALID_INPUT",
-    "message": "Request payload did not pass domain validation"
-  }
-}
+{ "success": false, "error": { "code": "PLAN_UPGRADE_REQUIRED", "message": "This feature is not included in your current plan" } }
 ```
 
 ### Tests
 
 ```java
-package com.example.api.controller;
+package com.example.feature;
 
-import com.example.api.ApiResponse;
-import com.example.api.RequestContext;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -789,110 +620,54 @@ import org.springframework.http.ResponseEntity;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-class UserResourceControllerTest {
+class FeatureControllerTest {
 
-    private final UserService            service    = mock(UserService.class);
-    private final UserResourceController controller = new UserResourceController(service);
-
-    // ── Helpers ─────────────────────────────────────────────────────────────
-
-    private static RequestContext ctx(
-            boolean auth, boolean authz, boolean found, boolean valid, Object resource) {
-        return new RequestContext(auth, authz, found, valid, resource);
-    }
-
-    private static final Object RESOURCE = new Object();
-
-    // ── 200 OK ──────────────────────────────────────────────────────────────
+    private final FeatureService    service    = mock(FeatureService.class);
+    private final FeatureController controller = new FeatureController(service);
 
     @Test
-    void allGatesPassReturns200WithData() {
-        when(service.buildContext("u1", "Bearer token")).thenReturn(
-                ctx(true, true, true, true, RESOURCE));
+    void validPlanAndQueryReturns200() {
+        FeatureRequest req = new FeatureRequest("u1", true, "search term");
+        when(service.process(req)).thenReturn("result text");
 
-        ResponseEntity<ApiResponse<UserDto>> response =
-                controller.getUser("u1", "Bearer token");
+        ResponseEntity<ApiResponse<String>> response = controller.processFeature(req);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertTrue(response.getBody().success());
-        assertNotNull(response.getBody().data());
-        assertNull(response.getBody().error());
+        assertEquals("result text", response.getBody().data());
     }
 
-    // ── 401 Unauthorized ────────────────────────────────────────────────────
-
     @Test
-    void notAuthenticatedReturns401() {
-        when(service.buildContext("u1", null)).thenReturn(
-                ctx(false, false, false, false, null));
+    void planNotIncludedReturns402() {
+        FeatureRequest req = new FeatureRequest("u2", false, "search term");
 
-        ResponseEntity<ApiResponse<UserDto>> response = controller.getUser("u1", null);
+        ResponseEntity<ApiResponse<String>> response = controller.processFeature(req);
 
-        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertEquals(HttpStatus.PAYMENT_REQUIRED, response.getStatusCode());
         assertFalse(response.getBody().success());
-        assertEquals("UNAUTHORIZED", response.getBody().error().code());
-        assertNull(response.getBody().data());
+        assertEquals("PLAN_UPGRADE_REQUIRED", response.getBody().error().code());
     }
 
-    // ── 403 Forbidden ───────────────────────────────────────────────────────
-
     @Test
-    void authenticatedButNotAuthorisedReturns403() {
-        when(service.buildContext("u2", "Bearer token")).thenReturn(
-                ctx(true, false, false, false, null));
+    void blankQueryReturns400() {
+        FeatureRequest req = new FeatureRequest("u3", true, "  ");
 
-        ResponseEntity<ApiResponse<UserDto>> response =
-                controller.getUser("u2", "Bearer token");
+        ResponseEntity<ApiResponse<String>> response = controller.processFeature(req);
 
-        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
-        assertFalse(response.getBody().success());
-        assertEquals("FORBIDDEN", response.getBody().error().code());
-    }
-
-    // ── 404 Not Found ───────────────────────────────────────────────────────
-
-    @Test
-    void authorisedButResourceNotFoundReturns404() {
-        when(service.buildContext("u999", "Bearer token")).thenReturn(
-                ctx(true, true, false, false, null));
-
-        ResponseEntity<ApiResponse<UserDto>> response =
-                controller.getUser("u999", "Bearer token");
-
-        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
-        assertFalse(response.getBody().success());
-        assertEquals("USER_NOT_FOUND", response.getBody().error().code());
-        assertTrue(response.getBody().error().message().contains("u999"));
-    }
-
-    // ── 422 Unprocessable Entity ─────────────────────────────────────────────
-
-    @Test
-    void invalidPayloadReturns422() {
-        when(service.buildContext("u1", "Bearer token")).thenReturn(
-                ctx(true, true, true, false, RESOURCE));
-
-        ResponseEntity<ApiResponse<UserDto>> response =
-                controller.getUser("u1", "Bearer token");
-
-        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, response.getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertFalse(response.getBody().success());
         assertEquals("INVALID_INPUT", response.getBody().error().code());
     }
 
-    // ── Lazy isolation: only the reached branch is evaluated ─────────────────
-
     @Test
-    void unauthenticatedRequestNeverEvaluatesInnerGates() {
-        // RequestContext with auth=false; inner state is intentionally "corrupt"
-        // to prove inner gates are never reached
-        RequestContext unauthCtx = ctx(false, true, true, true, RESOURCE);
-        when(service.buildContext("u1", null)).thenReturn(unauthCtx);
+    void planGateBlocksQueryEvaluation() {
+        // Plan excluded — service must never be called even if query is valid
+        FeatureRequest req = new FeatureRequest("u4", false, "valid query");
 
-        ResponseEntity<ApiResponse<UserDto>> response = controller.getUser("u1", null);
+        ResponseEntity<ApiResponse<String>> response = controller.processFeature(req);
 
-        // Despite inner flags being "true", outer gate short-circuits at 401
-        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertEquals(HttpStatus.PAYMENT_REQUIRED, response.getStatusCode());
+        verify(service, never()).process(any());
     }
 }
 ```

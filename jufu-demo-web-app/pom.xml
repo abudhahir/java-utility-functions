@@ -55,6 +55,27 @@
             <artifactId>lombok</artifactId>
             <optional>true</optional>
         </dependency>
+        <!-- rule-factory: predicate-based result selection -->
+        <dependency>
+            <groupId>com.cleveloper.jufu</groupId>
+            <artifactId>rule-factory</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+
+        <!-- request-utils: HTTP request condition matching -->
+        <dependency>
+            <groupId>com.cleveloper.jufu</groupId>
+            <artifactId>request-utils</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
+
+        <!-- JSONPath support for request-utils (marked optional in request-utils pom) -->
+        <dependency>
+            <groupId>com.jayway.jsonpath</groupId>
+            <artifactId>json-path</artifactId>
+            <version>2.9.0</version>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
